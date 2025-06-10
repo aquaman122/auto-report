@@ -1,0 +1,19 @@
+{
+  "name": "voice-meeting-reporter",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "process": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "음성 파일을 회의록으로 자동 변환하는 CLI 시스템",
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "fs-extra": "^11.3.0",
+    "moment": "^2.30.1",
+    "openai": "^5.2.0"
+  }
+}
