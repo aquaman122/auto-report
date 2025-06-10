@@ -1,0 +1,75 @@
+{
+  "name": "음성 처리 테스트",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "test-voice-processing",
+        "options": {}
+      },
+      "name": "테스트 웹훅",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://meeting-api:3000/api/audio/transcribe",
+        "options": {
+          "bodyContentType": "form-data"
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "audioFile",
+              "value": "={{ $json.audioFile }}"
+            },
+            {
+              "name": "language",
+              "value": "ko"
+            }
+          ]
+        }
+      },
+      "name": "STT 테스트",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const result = $input.first().json;\n\nif (result.success) {\n  return [{\n    json: {\n      status: 'success',\n      message: 'STT 테스트 성공',\n      text_length: result.data.text.length,\n      duration: result.data.duration,\n      word_count: result.data.word_count\n    }\n  }];\n} else {\n  throw new Error(`STT 테스트 실패: ${result.message}`);\n}"
+      },
+      "name": "결과 확인",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "테스트 웹훅": {
+      "main": [
+        [
+          {
+            "node": "STT 테스트",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STT 테스트": {
+      "main": [
+        [
+          {
+            "node": "결과 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "tags": ["test", "stt"]
+}
