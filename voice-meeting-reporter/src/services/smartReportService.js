@@ -363,9 +363,9 @@ ${actionItems.slice(0, 5).map((item, index) =>
 
   getStatusText(status) {
     const statusMap = {
-      'pending': '⏳ 대기중',
-      'in_progress': '🔄 진행중',
-      'completed': '✅ 완료'
+      'pending': '대기중',
+      'in_progress': '진행중',
+      'completed': '완료'
     };
     return statusMap[status] || status;
   }

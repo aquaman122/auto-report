@@ -7,9 +7,9 @@ const openai = new OpenAI({
 class ContentAnalysisService {
   async analyzeAndStructureMeeting(transcription, summary) {
     try {
-      console.log('🔍 회의 내용 구조화 분석 중...');
       
       const completion = await openai.chat.completions.create({
+        // 추후에 3.5보다 더 좋은걸로 변경 해봐도 좋을듯
         model: "gpt-3.5-turbo",
         messages: [
           {
@@ -48,10 +48,10 @@ class ContentAnalysisService {
       // JSON 파싱 시도
       try {
         const analysis = JSON.parse(analysisText);
-        console.log('✅ 회의 내용 구조화 완료');
+        console.log('회의 내용 구조화 완료');
         return analysis;
       } catch (parseError) {
-        console.log('⚠️  JSON 파싱 실패, 기본 구조 반환');
+        console.log('JSON 파싱 실패, 기본 구조 반환');
         return this.createFallbackStructure(summary, transcription);
       }
       
