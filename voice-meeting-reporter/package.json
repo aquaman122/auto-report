@@ -4,8 +4,8 @@
   "description": "스마트 음성 회의록 자동 생성 시스템",
   "main": "index.js",
   "scripts": {
-    "start": "node index-smart.js",
-    "webhook-test": "node webhook-test.js",
+    "start": "node index.js",
+    "webhook-test": "node index-with-webhook.js",
     "setup": "node setup.js",
     "setup-enhanced": "node setup-enhanced.js",
     "cli": "node cli-version.js"

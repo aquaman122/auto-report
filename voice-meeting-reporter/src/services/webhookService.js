@@ -2,9 +2,9 @@ const axios = require('axios');
 
 class WebhookService {
   constructor() {
-    this.webhookUrl = process.env.N8N_WEBHOOK_URL;
+    this.webhookUrl = process.env.N8N_WEBHOOK_URL || 'https://byeong98.app.n8n.cloud/webhook-test/ca36a72e-32cf-4e47-93e5-51e07e6be8f6';
     this.retryAttempts = 3;
-    this.retryDelay = 2000; // 2초
+    this.retryDelay = 2000;
   }
 
   async sendMeetingReport(meetingData, reportData, analysisData = null) {
@@ -15,29 +15,37 @@ class WebhookService {
 
     const payload = this.createPayload(meetingData, reportData, analysisData);
     
-    console.log('n8n webhook으로 데이터 전송 중...');
-    
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
         const response = await axios.post(this.webhookUrl, payload, {
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'Voice-Meeting-Reporter/2.0'
+            'User-Agent': 'Voice-Meeting-Reporter/2.0',
+            'X-Custom-Source': 'voice-meeting-reporter'
           },
-          timeout: 30000 // 30초 타임아웃
+          timeout: 30000
         });
 
         console.log('webhook 전송 성공!');
-        console.log(`응답 상태: ${response.status}`);
+        if (response.data) {
+          console.log('📄 응답 데이터:', response.data);
+        }
         
         return {
           success: true,
           response: response.data,
-          statusCode: response.status
+          statusCode: response.status,
+          webhookUrl: this.webhookUrl
         };
 
       } catch (error) {
         console.log(`webhook 전송 실패 (시도 ${attempt}/${this.retryAttempts}):`, error.message);
+        
+        // 에러 상세 정보 출력
+        if (error.response) {
+          console.log(`HTTP Status: ${error.response.status}`);
+          console.log(`Response Data:`, error.response.data);
+        }
         
         if (attempt < this.retryAttempts) {
           console.log(`🔄 ${this.retryDelay / 1000}초 후 재시도...`);
@@ -47,7 +55,8 @@ class WebhookService {
           return {
             success: false,
             error: error.message,
-            lastAttempt: attempt
+            lastAttempt: attempt,
+            errorDetails: error.response?.data
           };
         }
       }
@@ -71,13 +80,17 @@ class WebhookService {
       content: reportData.content,
       transcription: meetingData.transcription,
       summary: meetingData.summary,
+
+      // 문서 저장 위치 설정
+      // parentDocumentId: "d037797d-e1d8-488e-995b-111f6ff85a0d", // front 폴더 저장
       
       // 메타데이터
       metadata: {
         generated_at: new Date().toISOString(),
         processing_time: new Date() - (meetingData.startTime || new Date()),
         system_version: "2.0.0",
-        audio_duration: meetingData.audioDuration || "unknown"
+        audio_duration: meetingData.audioDuration || "unknown",
+        webhook_url: this.webhookUrl
       }
     };
 
@@ -101,22 +114,68 @@ class WebhookService {
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+  // testcode
+  // async testWebhook() {
+  //   const testPayload = {
+  //     title: "🧪 Webhook 연결 테스트",
+  //     date: new Date().toISOString().split('T')[0],
+  //     place: "테스트 환경",
+  //     content: "이것은 n8n webhook 연결 테스트입니다. 정상적으로 받으셨다면 성공!",
+  //     transcription: "테스트 음성 내용입니다.",
+  //     summary: "테스트 요약 내용입니다.",
+  //     metadata: {
+  //       test: true,
+  //       timestamp: new Date().toISOString(),
+  //       webhook_url: this.webhookUrl,
+  //       test_type: "connection_test"
+  //     }
+  //   };
 
-  // 테스트용 메서드
-  async testWebhook() {
-    const testPayload = {
-      title: "테스트 회의록",
-      date: new Date().toISOString().split('T')[0],
-      place: "테스트 장소",
-      content: "이것은 webhook 연결 테스트입니다.",
-      metadata: {
-        test: true,
-        timestamp: new Date().toISOString()
-      }
+  //   console.log('🧪 webhook 연결 테스트 중...');
+  //   console.log(`🎯 Target: ${this.webhookUrl}`);
+    
+  //   const result = await this.sendMeetingReport(
+  //     testPayload, 
+  //     { 
+  //       content: testPayload.content, 
+  //       filename: "webhook_test.txt",
+  //       filePath: "./test/webhook_test.txt"
+  //     }
+  //   );
+
+  //   if (result.success) {
+  //     console.log('테스트 성공! n8n에서 데이터를 받았습니다.');
+  //   } else {
+  //     console.log('테스트 실패. n8n 설정을 확인해주세요.');
+  //   }
+
+  //   return result;
+  // }
+
+  async pingWebhook() {
+    const pingPayload = {
+      type: "ping",
+      message: "Hello from Voice Meeting Reporter!",
+      timestamp: new Date().toISOString()
     };
 
-    console.log('webhook 연결 테스트 중...');
-    return await this.sendMeetingReport(testPayload, { content: testPayload.content, filename: "test.txt" });
+    console.log('Ping 테스트 중...');
+    
+    try {
+      const response = await axios.post(this.webhookUrl, pingPayload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Voice-Meeting-Reporter-Ping/2.0'
+        },
+        timeout: 10000
+      });
+
+      console.log('Ping 성공!', response.status);
+      return { success: true, status: response.status, data: response.data };
+    } catch (error) {
+      console.log('Ping 실패:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 }
 
