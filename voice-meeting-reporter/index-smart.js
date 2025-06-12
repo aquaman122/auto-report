@@ -3,6 +3,7 @@ const path = require('path');
 const readline = require('readline');
 const OpenAI = require('openai');
 const moment = require('moment');
+const axios = require('axios');
 require('dotenv').config();
 
 const whisperService = require('./src/services/whisperService');
@@ -28,8 +29,6 @@ function askQuestion(question) {
 // 간단한 AI 분석 함수
 async function analyzeContent(transcription, summary) {
   try {
-    console.log('🔍 AI 구조화 분석 중...');
-    
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -67,7 +66,7 @@ async function analyzeContent(transcription, summary) {
       };
     }
   } catch (error) {
-    console.log('⚠️ 분석 실패, 기본값 사용');
+    console.log('분석 실패, 기본값 사용');
     return {
       main_topics: ["회의 논의사항"],
       decisions: [{"decision": "추후 논의", "rationale": "분석 필요"}],
@@ -79,7 +78,203 @@ async function analyzeContent(transcription, summary) {
   }
 }
 
-// 스마트 보고서 생성
+// JSON 데이터 생성 함수
+function createMeetingJSON(meetingData, analysis) {
+  return {
+    meeting_title: meetingData.title,
+    meeting_date: moment(meetingData.date).format('YYYY-MM-DD'),
+    meeting_date_formatted: moment(meetingData.date).format('YYYY년 MM월 DD일'),
+    meeting_place: meetingData.place,
+    meeting_type: analysis.meeting_type || 'General Meeting',
+    
+    // 구조화된 내용
+    meeting_topics: analysis.main_topics || [],
+    main_discussions: analysis.main_topics || [],
+    decisions: analysis.decisions || [],
+    action_items: analysis.action_items || [],
+    
+    // 원본 내용
+    meeting_content: meetingData.summary,
+    full_transcription: meetingData.transcription,
+    
+    // 분석 데이터
+    keywords: analysis.keywords || [],
+    meeting_sentiment: getSentimentText(analysis.sentiment_score),
+    sentiment_score: analysis.sentiment_score || 0.0,
+    
+    // 메타데이터
+    metadata: {
+      created_at: moment().format('YYYY-MM-DD HH:mm:ss'),
+      audio_filename: meetingData.audioFilename || '',
+      system_version: '2.0.0',
+      processing_method: 'Smart_Analysis'
+    }
+  };
+}
+
+// Wiki 마크다운 생성 함수 (JSON 데이터 포함)
+function createWikiMarkdown(meetingData, analysis, jsonData) {
+  const meetingDate = moment(meetingData.date).format('YYYY-MM-DD');
+  
+  return `# ${meetingData.title}
+
+## 📋 회의 정보
+- **날짜**: ${moment(meetingData.date).format('YYYY년 MM월 DD일')}
+- **장소**: ${meetingData.place}
+- **유형**: ${analysis.meeting_type || 'General Meeting'}
+- **분위기**: ${getSentimentText(analysis.sentiment_score)} (${analysis.sentiment_score})
+
+## 🎯 주요 논의사항
+${(analysis.main_topics || []).map((topic, index) => `${index + 1}. ${topic}`).join('\n')}
+
+## 🔹 핵심 결정사항
+${(analysis.decisions || []).map((decision, index) => {
+  const decisionText = typeof decision === 'string' ? decision : decision.decision;
+  const rationale = typeof decision === 'object' ? decision.rationale : '';
+  return `**${index + 1}. ${decisionText}**${rationale ? `\n   - 근거: ${rationale}` : ''}`;
+}).join('\n\n')}
+
+## ⚡ 액션 아이템
+${(analysis.action_items || []).map((item, index) => {
+  const task = typeof item === 'string' ? item : item.task;
+  const assignee = typeof item === 'object' ? item.assignee : '미정';
+  const priority = typeof item === 'object' ? item.priority : '중간';
+  return `- **${task}**\n  - 담당자: ${assignee}\n  - 우선순위: ${priority}`;
+}).join('\n\n')}
+
+## 📊 분석 정보
+- **키워드**: ${(analysis.keywords || []).join(', ')}
+- **회의 분위기**: ${getSentimentText(analysis.sentiment_score)}
+
+## 📄 JSON 데이터 (API 연동용)
+
+\`\`\`json
+${JSON.stringify(jsonData, null, 2)}
+\`\`\`
+
+> 💡 **사용법**: 위 JSON 데이터를 복사해서 API 연동이나 추가 개발에 활용하세요.
+
+## 📄 상세 내용
+
+### 요약
+${meetingData.summary}
+
+### 전체 녹취록
+\`\`\`
+${meetingData.transcription}
+\`\`\`
+
+---
+*자동 생성된 회의록 (OpenAI Whisper + GPT) - ${moment().format('YYYY-MM-DD HH:mm:ss')}*`;
+}
+
+// Wiki 설정 검증 함수
+function validateWikiConfig() {
+  const required = ['WIKI_API_URL', 'WIKI_AUTH_TOKEN', 'WIKI_COLLECTION_ID', 'WIKI_PARENT_DOCUMENT_ID'];
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    return false;
+  }
+  return true;
+}
+
+// Wiki API 전송 함수 (JSON 데이터 포함)
+async function sendToWiki(meetingData, analysis, jsonData) {
+  if (!validateWikiConfig()) {
+    return { success: false, error: 'Wiki configuration missing' };
+  }
+
+  const wikiUrl = process.env.WIKI_API_URL;
+  const authToken = process.env.WIKI_AUTH_TOKEN;
+  const collectionId = process.env.WIKI_COLLECTION_ID;
+  const parentDocumentId = process.env.WIKI_PARENT_DOCUMENT_ID;
+  
+  try {
+    const markdownContent = createWikiMarkdown(meetingData, analysis, jsonData);
+    
+    const wikiData = {
+      title: `${moment(meetingData.date).format('YYYY-MM-DD')} ${meetingData.title}`,
+      text: markdownContent,
+      collectionId: collectionId,
+      parentDocumentId: parentDocumentId,
+      publish: true
+    };
+    
+    const response = await axios.post(wikiUrl, wikiData, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      timeout: 15000
+    });
+
+    console.log('Wiki 문서 생성 성공!');
+    
+    if (response.data && response.data.url) {
+      console.log(`Wiki URL: ${response.data.url}`);
+    }
+    
+    return {
+      success: true,
+      response: response.data,
+      statusCode: response.status,
+      wikiUrl: response.data.url || null
+    };
+
+  } catch (error) {
+    console.log('Wiki 생성 실패:', error.message);
+    
+    if (error.response) {
+      
+      // 401 Unauthorized 에러 특별 처리
+      if (error.response.status === 401) {
+        console.log('인증 오류: Auth Token을 확인하세요.');
+      }
+    }
+    
+    return {
+      success: false,
+      error: error.message,
+      errorDetails: error.response?.data
+    };
+  }
+}
+
+// POST 요청 전송 함수 (추가 API용)
+async function sendMeetingData(jsonData) {
+  const targetUrl = process.env.POST_TARGET_URL; 
+  
+  if (!targetUrl) {
+    return { success: false, error: 'No POST target URL configured' };
+  }
+  
+  try {
+    const response = await axios.post(targetUrl, jsonData, {
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Voice-Meeting-Reporter/2.0'
+      },
+      timeout: 15000
+    });
+    
+    return {
+      success: true,
+      response: response.data,
+      statusCode: response.status
+    };
+
+  } catch (error) {
+    console.log('추가 데이터 전송 실패:', error.message);
+    
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// 스마트 보고서 생성 함수
 function generateSmartReport(meetingData, analysis) {
   const meetingDate = moment(meetingData.date).format('YYYY년 MM월 DD일');
   
@@ -148,10 +343,10 @@ function getSentimentText(score) {
   return '😐 중립적';
 }
 
+// 🔥 수정된 메인 함수 - Wiki 연동 추가
 async function processSmartMeeting() {
   try {
-    console.log('🤖 스마트 음성 회의록 자동 생성 시스템');
-    console.log('═'.repeat(60));
+    console.log('🎤 스마트 음성 회의록 자동 생성 시스템 (Wiki 연동)');
 
     await fs.ensureDir('audio');
     await fs.ensureDir('reports');
@@ -174,7 +369,7 @@ async function processSmartMeeting() {
     const selectedFile = validFiles[parseInt(fileChoice) - 1];
 
     if (!selectedFile) {
-      console.log('❌ 잘못된 선택입니다.');
+      console.log('잘못된 선택입니다.');
       return;
     }
 
@@ -183,32 +378,27 @@ async function processSmartMeeting() {
     const meetingDate = await askQuestion('📅 회의 날짜 (YYYY-MM-DD, Enter: 오늘): ') || new Date().toISOString().split('T')[0];
     const meetingPlace = await askQuestion('📍 회의 장소: ') || '미기재';
 
-    console.log('\n🚀 스마트 처리 시작...');
-
     // 음성 처리
     const audioFilePath = path.join('./audio', selectedFile);
-    console.log('🎵 Whisper로 음성 변환 중...');
     const transcription = await whisperService.transcribeAudio(audioFilePath);
 
-    console.log('🤖 GPT로 요약 중...');
     const summary = await summaryService.summarizeText(transcription);
 
-    console.log('🔍 AI로 회의 내용 구조화 중...');
     const analysis = await analyzeContent(transcription, summary);
 
-    // 스마트 회의록 생성
-    console.log('📄 스마트 회의록 생성 중...');
+    // 회의 데이터 구성
     const meetingData = {
       title: meetingTitle,
       date: meetingDate,
       place: meetingPlace,
       transcription,
-      summary
+      summary,
+      audioFilename: selectedFile
     };
 
+    // 1. 스마트 회의록 생성 (.txt 파일)
     const reportContent = generateSmartReport(meetingData, analysis);
 
-    // 파일 저장
     const timestamp = moment().format('YYYYMMDD_HHmmss');
     const filename = `스마트_회의록_${meetingTitle.replace(/[^\w가-힣]/g, '_')}_${timestamp}.txt`;
     const filePath = path.join('./reports', filename);
@@ -216,13 +406,42 @@ async function processSmartMeeting() {
     await fs.writeFile(filePath, reportContent, 'utf8');
 
     console.log('✅ 스마트 회의록 생성 완료!');
-    console.log(`📁 파일: ${path.resolve(filePath)}`);
-    console.log(`📊 분석된 키워드: ${analysis.keywords.slice(0, 5).join(', ')}`);
-    console.log(`😊 회의 분위기: ${getSentimentText(analysis.sentiment_score)}`);
-    console.log(`🏷️ 회의 유형: ${analysis.meeting_type}`);
+
+    // 2. JSON 데이터 생성 및 저장
+    const jsonData = createMeetingJSON(meetingData, analysis);
+    
+    const jsonFilename = filename.replace('.txt', '.json');
+    const jsonFilePath = path.join('./reports', jsonFilename);
+    await fs.writeFile(jsonFilePath, JSON.stringify(jsonData, null, 2), 'utf8');
+
+    // 🔥 3. Wiki에 회의록 생성 (JSON 데이터 포함)
+    const wikiResult = await sendToWiki(meetingData, analysis, jsonData);
+    
+    if (wikiResult.success) {
+      console.log('Wiki 회의록 생성 성공!');
+      if (wikiResult.wikiUrl) {
+        console.log(`Wiki URL: ${wikiResult.wikiUrl}`);
+      }
+      console.log('팀원들이 Wiki에서 회의록과 JSON 데이터를 확인할 수 있습니다.');
+    } else {
+      console.log('Wiki 생성 실패, 하지만 로컬 파일은 정상 생성되었습니다.');
+      console.log('나중에 Wiki에 수동으로 업로드하거나 설정을 확인하세요.');
+    }
+
+    // 4. 추가 API 전송 (선택사항)
+    if (process.env.POST_TARGET_URL) {
+      console.log('\n 추가 API 전송 중...');
+      const apiResult = await sendMeetingData(jsonData);
+      
+      if (apiResult.success) {
+        console.log('추가 API 전송 성공!');
+      } else {
+        console.log('추가 API 전송 실패 (선택사항)');
+      }
+    }
 
   } catch (error) {
-    console.error('❌ 오류:', error.message);
+    console.error('오류:', error.message);
   }
 }
 
