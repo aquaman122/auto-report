@@ -1,0 +1,35 @@
+{
+  "name": "voice-meeting-reporter",
+  "version": "2.0.0",
+  "description": "스마트 음성 회의록 자동 생성 시스템",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "webhook-test": "node index-with-webhook.js",
+    "setup": "node setup.js",
+    "setup-enhanced": "node setup-enhanced.js",
+    "cli": "node cli-version.js"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "fs-extra": "^11.3.0",
+    "moment": "^2.30.1",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.1.0",
+    "openai": "^4.20.1",
+    "readline": "^1.3.0",
+    "winston": "^3.17.0"
+  },
+  "keywords": [
+    "audio",
+    "transcription",
+    "openai",
+    "whisper",
+    "meeting",
+    "report"
+  ]
+}
