@@ -1,10 +1,12 @@
 import './App.css'
-import AudioUpload from './components/AudioUpload'
+// import AudioUpload from './components/AudioUpload'
+import { ReceiptUpload } from './components/ReceiptUpload'
 
 function App() {
   return (
     <div className="min-h-screen bg-gray-100">
-      <div className="container mx-auto py-8">
+      <ReceiptUpload />
+      {/* <div className="container mx-auto py-8">
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
             스마트 음성 회의록 자동화
@@ -15,7 +17,7 @@ function App() {
         </header>
         
         <AudioUpload />
-      </div>
+      </div> */}
     </div>
   )
 }
